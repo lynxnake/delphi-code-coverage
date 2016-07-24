@@ -12,7 +12,7 @@ type
   strict private
     FSplitted: TStringDynArray;
   public
-    procedure Setup; override;
+    procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure EmptyStringShouldReturnSingleEmptyElement;
@@ -37,8 +37,7 @@ end;
 procedure TestSplitString.EmptyStringShouldReturnSingleEmptyElement;
 begin
   FSplitted := SplitString('', '');
-  CheckEquals(1, Length(FSplitted), 'Element length should be 1');
-  CheckEqualsString('', FSplitted[0], 'First entry should be Empty');
+  CheckEquals(0, Length(FSplitted), 'Element length should be 0');
 end;
 
 procedure TestSplitString.EmptyDelimiterShouldReturnSingleElement;

@@ -34,9 +34,11 @@ type
     function UseApiDebug: Boolean;
     function IsComplete(var AReason: string): Boolean;
     function EmmaOutput: Boolean;
+    function EmmaOutput21: Boolean;
     function SeparateMeta: Boolean;
     function XmlOutput: Boolean;
     function HtmlOutput: Boolean;
+    function TestExeExitCode: Boolean;
     function ModuleNameSpace(const AModuleName: string): TModuleNameSpace;
     function UnitNameSpace(const AModuleName: string): TUnitNameSpace;
   end;
@@ -59,6 +61,7 @@ const
   cPARAMETER_SOURCE_PATHS = '-sp';
   cPARAMETER_SOURCE_PATHS_FILE = '-spf';
   cPARAMETER_EMMA_OUTPUT = '-emma';
+  cPARAMETER_EMMA21_OUTPUT = '-emma21';
   cPARAMETER_XML_OUTPUT = '-xml';
   cPARAMETER_HTML_OUTPUT = '-html';
   cPARAMETER_DPROJ = '-dproj';
@@ -66,6 +69,7 @@ const
   cPARAMETER_MODULE_NAMESPACE = '-mns';
   cPARAMETER_UNIT_NAMESPACE = '-uns';
   cPARAMETER_EMMA_SEPARATE_META = '-meta';
+  cPARAMETER_TESTEXE_EXIT_CODE = '-tec';
 
   cIGNORE_UNIT_PREFIX = '!';
 implementation

@@ -9,3 +9,4 @@ CodeCoverage/CodeCoverage.drc
 build/*/*.*
 build/*/*/*.*
 dunit.ini
+/*.dsk

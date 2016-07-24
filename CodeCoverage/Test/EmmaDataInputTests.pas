@@ -26,6 +26,7 @@ type
 implementation
 
 uses
+  Types,
   SysUtils,
   Winsock;
 
@@ -255,7 +256,7 @@ begin
   SetLength(ExpectedIntArray, 10 + Random(100));
 
   for i := 0 to Length(ExpectedIntArray) - 1 do
-    ExpectedIntArray[i] := Random(MaxInt + 1);
+    ExpectedIntArray[i] := Random(MaxInt);
 
   FStream := TMemoryStream.Create;
   try
@@ -283,11 +284,11 @@ end;
 
 procedure TestTEmmaDataInput.TestReadBooleanArray;
 var
-  ExpectedBoolArray: TBooleanArray;
+  ExpectedBoolArray: TBooleanDynArray;
   i: Integer;
   v: Byte;
   FStream: TMemoryStream;
-  actualArray: TBooleanArray;
+  actualArray: TBooleanDynArray;
 begin
   Randomize;
   SetLength(ExpectedBoolArray, 10 + Random(100));
@@ -309,7 +310,7 @@ begin
     SetUpDataInput(FStream);
 
     SetLength(actualArray, 0);
-    FDataInput.ReadBooleanArray(actualArray);
+    actualArray := FDataInput.ReadBooleanArray;
     CheckEquals(Length(ExpectedBoolArray), Length(actualArray), 'Length');
 
     for i := 0 to Length(actualArray) - 1 do

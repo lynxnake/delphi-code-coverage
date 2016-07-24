@@ -28,7 +28,8 @@ uses
   I_LogManager,
   ClassInfoUnit,
   ModuleNameSpaceUnit,
-  uConsoleOutput;
+  uConsoleOutput,
+  JwaPsApi;
 
 type
   TDebugger = class(TInterfacedObject, IDebugger)
@@ -41,6 +42,7 @@ type
     FCoverageStats: ICoverageStats;
     FLogManager: ILogManager;
     FModuleList: TModuleList;
+    FTestExeExitCode: Integer;
 
     function AddressFromVA(
       const AVA: DWORD;
@@ -48,6 +50,7 @@ type
     function VAFromAddress(
       const AAddr: Pointer;
       const AModule: HMODULE): DWORD;{$IFDEF SUPPORTS_INLINE} inline; {$ENDIF}
+    function GetImageName(const APtr: Pointer; const AUnicode: Word; const AlpBaseOfDll: Pointer; const AHandle: THANDLE): string;
     procedure AddBreakPoints(
       const AModuleList: TStrings;
       const AExcludedModuleList: TStrings;
@@ -99,6 +102,7 @@ function RealReadFromProcessMemory(
 implementation
 
 uses
+  ActiveX,
   SysUtils,
   JwaNtStatus,
   JwaWinNT,
@@ -147,6 +151,7 @@ end;
 constructor TDebugger.Create;
 begin
   inherited;
+  CoInitialize(nil);
 
   FBreakPointList := TBreakPointList.Create;
   FCoverageConfiguration := TCoverageConfiguration.Create(TCommandLineProvider.Create);
@@ -168,6 +173,7 @@ begin
   uConsoleOutput.G_LogManager := nil;
   FLogManager := nil;
   FModuleList.Free;
+  CoUninitialize;
 
   inherited;
 end;
@@ -266,13 +272,18 @@ begin
     FCoverageConfiguration.ParseCommandLine(FLogManager);
 
     if FCoverageConfiguration.IsComplete(Reason) then
-      Debug
+    begin
+      ForceDirectories(FCoverageConfiguration.OutputDir);
+      Debug;
+    end
     else
     begin
       ConsoleOutput('The configuration was incomplete due to the following error:');
       ConsoleOutput(Reason);
       PrintUsage;
     end;
+    if FCoverageConfiguration.TestExeExitCode then
+      ExitCode := FTestExeExitCode;
   except
     on E: EConfigurationException do
     begin
@@ -342,7 +353,7 @@ begin
     CoverageReport.Generate(FCoverageStats, FModuleList,FLogManager);
   end;
 
-  if (FCoverageConfiguration.EmmaOutput) then
+  if (FCoverageConfiguration.EmmaOutput) or (FCoverageConfiguration.EmmaOutput21) then
   begin
     CoverageReport := TEmmaCoverageFile.Create(FCoverageConfiguration);
     CoverageReport.Generate(FCoverageStats, FModuleList,FLogManager);
@@ -605,9 +616,12 @@ begin
           if (ModuleName = ModuleNameFromAddr) then
           begin
             UnitName := AMapScanner.SourceNameFromAddr(MapLineNumber.VA);
+            if ExtractFileExt(UnitName) = '' then
+              UnitName := ChangeFileExt(UnitName, '.pas');
             UnitModuleName := ChangeFileExt(UnitName, '');
 
-            if (AModuleList.IndexOf(ModuleName) > -1)
+            if (AModuleList.IndexOf(UnitModuleName) > -1)
+            and (AModuleList.IndexOf(ModuleName) > -1)
             and (AExcludedModuleList.IndexOf(UnitModuleName) < 0) then
             begin
               FLogManager.Log(
@@ -664,7 +678,7 @@ begin
   FLogManager.Log('Done adding  BreakPoints');
 end;
 
-function GetImageName(APtr: Pointer; AUnicode: Word; AHandle: THANDLE): string;
+function TDebugger.GetImageName(const APtr: Pointer; const AUnicode: Word; const AlpBaseOfDll: Pointer; const AHandle: THANDLE): string;
 var
   PtrDllName: Pointer;
   ByteRead: DWORD;
@@ -686,6 +700,15 @@ begin
             Result := string(PChar(@ImageName));
         end;
       end;
+    end
+    else
+    begin
+      // if ReadProcessMemory failed
+      FLogManager.Log('ReadProcessMemory error: ' + SysErrorMessage(GetLastError));
+      if GetModuleFileNameEx (AHandle, HMODULE(AlpBaseOfDll), ImageName, MAX_PATH) = 0 then
+        FLogManager.Log('GetModuleFileNameEx error: ' + SysErrorMessage(GetLastError))
+      else
+        Result := string(PWideChar(@ImageName));
     end;
   end;
 end;
@@ -1008,6 +1031,7 @@ procedure TDebugger.HandleExitProcess(
   const ADebugEvent: DEBUG_EVENT;
   var AContProcessEvents: Boolean);
 begin
+  FTestExeExitCode := ADebugEvent.ExitProcess.dwExitCode;
   FLogManager.Log(
     'Process ' + IntToStr(ADebugEvent.dwProcessId) +
     ' exiting. Exit code :' + IntToStr(ADebugEvent.ExitProcess.dwExitCode));
@@ -1036,6 +1060,7 @@ begin
   DllName := GetImageName(
     ADebugEvent.LoadDll.lpImageName,
     ADebugEvent.LoadDll.fUnicode,
+    ADebugEvent.LoadDll.lpBaseOfDll,
     FDebugProcess.Handle);
 
   PEImage := TJCLPEImage.Create;

@@ -33,15 +33,18 @@ type
     FDebugLogFileName: string;
     FApiLogging: Boolean;
     FParameterProvider: IParameterProvider;
+    FDProjUnitsLst: TStringList;
     FUnitsStrLst: TStringList;
     FExcludedUnitsStrLst: TStringList;
     FExeParamsStrLst: TStrings;
     FSourcePathLst: TStrings;
     FStripFileExtension: Boolean;
     FEmmaOutput: Boolean;
+    FEmmaOutput21: Boolean;
     FSeparateMeta: Boolean;
     FXmlOutput: Boolean;
     FHtmlOutput: Boolean;
+    FTestExeExitCode: Boolean;
     FExcludeSourceMaskLst: TStrings;
     FLoadingFromDProj: Boolean;
     FModuleNameSpaces: TModuleNameSpaceList;
@@ -52,7 +55,7 @@ type
     function ParseParameter(const AParameter: Integer): string;
     procedure ParseSwitch(var AParameter: Integer);
     procedure ParseBooleanSwitches;
-    procedure GetCurrentConfigAndPlatform(const Project: IXMLNode; out ACurrentConfig, ACurrentPlatform: string);
+    function GetCurrentConfig(const Project: IXMLNode): string;
     function GetExeOutputFromDProj(const Project: IXMLNode; const ProjectName: TFileName): string;
     procedure ParseDProj(const DProjFilename: TFileName);
     function IsPathInExclusionList(const APath: TFileName): Boolean;
@@ -99,9 +102,11 @@ type
     function UseApiDebug: Boolean;
     function IsComplete(var AReason: string): Boolean;
     function EmmaOutput: Boolean;
+    function EmmaOutput21: Boolean;
     function SeparateMeta: Boolean;
     function XmlOutput: Boolean;
     function HtmlOutput: Boolean;
+    function TestExeExitCode: Boolean;
 
     function ModuleNameSpace(const AModuleName: string): TModuleNameSpace;
     function UnitNameSpace(const AModuleName: string): TUnitNameSpace;
@@ -118,7 +123,7 @@ uses
   IOUtilsD9,
   {$ELSE}
   IOUtils,
-  {$IFEND}
+  {$ENDIF}
   LoggerTextFile,
   LoggerAPI,
   XMLDoc,
@@ -132,8 +137,8 @@ begin
   Result := '';
   if Length(AParameter) > 0 then
   begin
-    lp := 1;
-    while lp <= length(AParameter) do
+    lp := Low(AParameter);
+    while lp <= High(AParameter) do
     begin
       if AParameter[lp] = I_CoverageConfiguration.cESCAPE_CHARACTER then
         Inc(lp);
@@ -162,18 +167,26 @@ begin
   FExcludedUnitsStrLst.Sorted := True;
   FExcludedUnitsStrLst.Duplicates := dupIgnore;
 
+  FDProjUnitsLst := TStringList.Create;
+  FDProjUnitsLst.CaseSensitive := False;
+  FDProjUnitsLst.Sorted := True;
+  FDProjUnitsLst.Duplicates := dupIgnore;
+
   FApiLogging := False;
 
   FStripFileExtension := True;
 
   FSourcePathLst := TStringList.Create;
   FEmmaOutput := False;
+  FEmmaOutput21 := False;
   FSeparateMeta := False;
   FHtmlOutput := False;
   FXmlOutput := False;
   FExcludeSourceMaskLst := TStringList.Create;
   FModuleNameSpaces := TModuleNameSpaceList.Create;
   FUnitNameSpaces := TUnitNameSpaceList.Create;
+
+  FOutputDir := '.';
 end;
 
 destructor TCoverageConfiguration.Destroy;
@@ -307,6 +320,11 @@ begin
   Result := FEmmaOutput;
 end;
 
+function TCoverageConfiguration.EmmaOutput21: Boolean;
+begin
+  Result := FEmmaOutput21;
+end;
+
 function TCoverageConfiguration.SeparateMeta;
 begin
   Result := FSeparateMeta;
@@ -320,6 +338,11 @@ end;
 function TCoverageConfiguration.HtmlOutput: Boolean;
 begin
   Result := FHtmlOutput;
+end;
+
+function TCoverageConfiguration.TestExeExitCode: Boolean;
+begin
+  Result := FTestExeExitCode;
 end;
 
 function TCoverageConfiguration.IsPathInExclusionList(const APath: TFileName): Boolean;
@@ -348,10 +371,12 @@ procedure TCoverageConfiguration.ParseBooleanSwitches;
   end;
 begin
   FEmmaOutput := IsSet(I_CoverageConfiguration.cPARAMETER_EMMA_OUTPUT);
+  FEmmaOutput21 := IsSet(I_CoverageConfiguration.cPARAMETER_EMMA21_OUTPUT);
   FSeparateMeta := IsSet(I_CoverageConfiguration.cPARAMETER_EMMA_SEPARATE_META);
   FXmlOutput := IsSet(I_CoverageConfiguration.cPARAMETER_XML_OUTPUT);
   FHtmlOutput := IsSet(I_CoverageConfiguration.cPARAMETER_HTML_OUTPUT);
   uConsoleOutput.G_Verbose_Output := IsSet(I_CoverageConfiguration.cPARAMETER_VERBOSE);
+  FTestExeExitCode := IsSet(I_CoverageConfiguration.cPARAMETER_TESTEXE_EXIT_CODE);
 end;
 
 procedure TCoverageConfiguration.ExcludeSourcePaths;
@@ -365,6 +390,18 @@ begin
     begin
       VerboseOutput('Skipping Unit ' + FUnitsStrLst[I] + ' from tracking because source path is excluded.');
       FUnitsStrLst.Delete(I);
+    end
+    else
+      Inc(I);
+  end;
+
+  I := 0;
+  while I < FDprojUnitsLst.Count do
+  begin
+    if IsPathInExclusionList(FDprojUnitsLst[I]) then
+    begin
+      VerboseOutput('Skipping Unit ' + FDprojUnitsLst[I] + ' from tracking because source path is excluded.');
+      FDprojUnitsLst.Delete(I);
     end
     else
       Inc(I);
@@ -397,12 +434,10 @@ begin
   NewUnitsList := TStringList.Create;
   try
     for CurrentUnit in FUnitsStrLst do
-    begin
-      if FLoadingFromDProj then
-        NewUnitsList.Add(ChangeFileExt(ExtractFileName(CurrentUnit), ''))
-      else
-        NewUnitsList.Add(CurrentUnit);
-    end;
+      NewUnitsList.Add(CurrentUnit);
+
+    for CurrentUnit in FDProjUnitsLst do
+      NewUnitsList.Add(ChangeFileExt(ExtractFileName(CurrentUnit), ''));
 
     FUnitsStrLst.Clear;
     for CurrentUnit in NewUnitsList do
@@ -471,8 +506,9 @@ begin
   Size := ExpandEnvironmentStrings(PChar(APath), nil, 0);
   if Size > 0 then
   begin
-    SetLength(Result, Size - 1);
+    SetLength(Result, Size);
     ExpandEnvironmentStrings(PChar(APath), PChar(Result), Size);
+    SetLength(Result, Length(Result) - 1);
   end;
 end;
 
@@ -508,9 +544,12 @@ begin
   else if (SwitchItem = I_CoverageConfiguration.cPARAMETER_FILE_EXTENSION_INCLUDE) then
     FStripFileExtension := False
   else if (SwitchItem = I_CoverageConfiguration.cPARAMETER_EMMA_OUTPUT)
+  or (SwitchItem = I_CoverageConfiguration.cPARAMETER_EMMA21_OUTPUT)
+  or (SwitchItem = I_CoverageConfiguration.cPARAMETER_EMMA_SEPARATE_META)
   or (SwitchItem = I_CoverageConfiguration.cPARAMETER_XML_OUTPUT)
   or (SwitchItem = I_CoverageConfiguration.cPARAMETER_HTML_OUTPUT)
-  or (SwitchItem = I_CoverageConfiguration.cPARAMETER_VERBOSE) then
+  or (SwitchItem = I_CoverageConfiguration.cPARAMETER_VERBOSE)
+  or (SwitchItem = I_CoverageConfiguration.cPARAMETER_TESTEXE_EXIT_CODE) then
   begin
     // do nothing, because its already parsed
   end
@@ -523,6 +562,7 @@ begin
   else if SwitchItem = I_CoverageConfiguration.cPARAMETER_UNIT_NAMESPACE then
     ParseUnitNameSpaceSwitch(AParameter)
   else
+    //raise Exception.Create('Error Message' + SwitchItem);
     raise EConfigurationException.Create('Unexpected switch:' + SwitchItem);
 end;
 
@@ -760,9 +800,7 @@ begin
   try
     FOutputDir := ParseParameter(AParameter);
     if FOutputDir = '' then
-      raise EConfigurationException.Create('Expected parameter for output directory')
-    else
-      ForceDirectories(FOutputDir);
+      raise EConfigurationException.Create('Expected parameter for output directory');
   except
     on EParameterIndexException do
       raise EConfigurationException.Create('Expected parameter for output directory')
@@ -811,33 +849,24 @@ begin
   end;
 end;
 
-procedure TCoverageConfiguration.GetCurrentConfigAndPlatform(const Project: IXMLNode; out ACurrentConfig, ACurrentPlatform: string);
+function TCoverageConfiguration.GetCurrentConfig(const Project: IXMLNode): string;
 var
   Node: IXMLNode;
   CurrentConfigNode: IXMLNode;
-  CurrentPlatformNode: IXMLNode;
 begin
   Assert(Assigned(Project));
+  Result := '';
   Node := Project.ChildNodes.Get(0);
   if (Node.LocalName = 'PropertyGroup') then
   begin
     CurrentConfigNode := Node.ChildNodes.FindNode('Config');
     if CurrentConfigNode <> nil then
-      ACurrentConfig := CurrentConfigNode.Text
-    else
-      ACurrentConfig := '';
-
-    CurrentPlatformNode := Node.ChildNodes.FindNode('Platform');
-    if CurrentPlatformNode <> nil then
-      ACurrentPlatform := CurrentPlatformNode.Text
-    else
-      ACurrentPlatform := '';
+      Result := CurrentConfigNode.Text;
   end;
 end;
 
 function TCoverageConfiguration.GetExeOutputFromDProj(const Project: IXMLNode; const ProjectName: TFileName): string;
 var
-  DCC_DependencyCheckOutputName: IXMLNode;
   CurrentConfig: string;
   CurrentPlatform: string;
   DCC_ExeOutputNode: IXMLNode;
@@ -847,7 +876,13 @@ var
 begin
   Result := '';
   Assert(Assigned(Project));
-  GetCurrentConfigAndPlatform(Project, CurrentConfig, CurrentPlatform);
+  CurrentConfig := GetCurrentConfig(Project);
+
+  {$IFDEF WIN64}
+  CurrentPlatform := 'Win64';
+  {$ELSE}
+  CurrentPlatform := 'Win32';
+  {$ENDIF}
 
   for GroupIndex := 0 to Project.ChildNodes.Count - 1 do
   begin
@@ -859,19 +894,18 @@ begin
       or (Node.Attributes['Condition'] = '''$(Basis)''!=''''')
     ) then
     begin
-      DCC_DependencyCheckOutputName := Node.ChildNodes.FindNode('DCC_DependencyCheckOutputName');
-      if DCC_DependencyCheckOutputName <> nil then
-        Result := DCC_DependencyCheckOutputName.Text
-      else if (CurrentConfig <> '') and (CurrentPlatform <> '') then
+      if CurrentConfig <> '' then
       begin
         DCC_ExeOutputNode := Node.ChildNodes.FindNode('DCC_ExeOutput');
         if DCC_ExeOutputNode <> nil then
         begin
           DCC_ExeOutput := DCC_ExeOutputNode.Text;
-          DCC_ExeOutput := StringReplace(DCC_ExeOutput, '$(Platform)', CurrentPlatform, [rfReplaceAll]);
-          DCC_ExeOutput := StringReplace(DCC_ExeOutput, '$(Config)', CurrentConfig, [rfReplaceAll]);
-          Result := IncludeTrailingPathDelimiter(DCC_ExeOutput) + ChangeFileExt(ProjectName, '.exe');
-        end;
+          DCC_ExeOutput := StringReplace(DCC_ExeOutput, '$(Platform)', CurrentPlatform, [rfReplaceAll, rfIgnoreCase]);
+          DCC_ExeOutput := StringReplace(DCC_ExeOutput, '$(Config)', CurrentConfig, [rfReplaceAll, rfIgnoreCase]);
+          Result := IncludeTrailingPathDelimiter(DCC_ExeOutput) + ChangeFileExt(ExtractFileName(ProjectName), '.exe');
+        end
+        else
+          Result := ChangeFileExt(ProjectName, '.exe');
       end;
     end;
   end;
@@ -895,7 +929,7 @@ begin
   Project := Document.ChildNodes.FindNode('Project');
   if Project <> nil then
   begin
-    ExeFileName := GetExeOutputFromDProj(Project, ExtractFileName(DProjFilename));
+    ExeFileName := GetExeOutputFromDProj(Project, DProjFilename);
     if ExeFileName <> '' then
     begin
       if FExeFileName = '' then
@@ -916,10 +950,10 @@ begin
           Unitname := TPath.GetFullPath(TPath.Combine(RootPath, Node.Attributes['Include']));
           SourcePath := TPath.GetDirectoryName(Unitname);
           if FSourcePathLst.IndexOf(SourcePath) = -1 then
-             FSourcePathLst.Add(SourcePath);
+            FSourcePathLst.Add(SourcePath);
 
-          if FExcludedUnitsStrLst.IndexOf(Unitname) < 0 then
-            FUnitsStrLst.Add(UnitName);
+          if FDProjUnitsLst.IndexOf(UnitName) = -1 then
+            FDProjUnitsLst.Add(UnitName);
         end;
       end;
     end;
@@ -935,7 +969,7 @@ begin
     SourcePathString := ParseParameter(AParameter);
     while SourcePathString <> '' do
     begin
-      FExcludeSourceMaskLst.Add(SourcePathString);
+      FExcludeSourceMaskLst.Add(ReplaceStr(SourcePathString, '/', TPath.DirectorySeparatorChar));
       Inc(AParameter);
       SourcePathString := ParseParameter(AParameter);
     end;
