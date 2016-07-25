@@ -150,7 +150,7 @@ begin
   CheckEquals('', LCoverageConfiguration.ApplicationParameters, 'Application Parameters set');
   CheckEquals('', LCoverageConfiguration.ExeFileName, 'Executable file name should not be set');
   CheckEquals('', LCoverageConfiguration.MapFileName, 'Map file name should not be set');
-  CheckEquals('', LCoverageConfiguration.OutputDir,   'Report output directory should not be set');
+  CheckEquals('.', LCoverageConfiguration.OutputDir,   'Report output directory should be equal to current directory, i.e. ''.''');
   CheckEquals('', LCoverageConfiguration.SourceDir,   'Source directory should not be set');
   CheckEquals('', LCoverageConfiguration.DebugLogFile, 'Debug logging file name should not be set');
   CheckEquals(0, LCoverageConfiguration.SourcePaths.Count, 'Source paths should not have directories listed');
@@ -179,7 +179,7 @@ begin
       CheckEquals('', LCoverageConfiguration.ApplicationParameters, 'Application Parameters set');
       CheckEquals('', LCoverageConfiguration.ExeFileName, 'Executable file name should not be set');
       CheckEquals('', LCoverageConfiguration.MapFileName, 'Map file name should not be set');
-      CheckEquals('', LCoverageConfiguration.OutputDir,   'Report output directory should not be set');
+      CheckEquals('.', LCoverageConfiguration.OutputDir,   'Report output directory should be equal to current directory, i.e. ''.''');
       CheckEquals('', LCoverageConfiguration.SourceDir,   'Source directory should not be set');
       CheckEquals('', LCoverageConfiguration.DebugLogFile, 'Debug logging file name should not be set');
       CheckEquals(0, LCoverageConfiguration.SourcePaths.Count, 'Source paths should not have directories listed');
@@ -211,7 +211,7 @@ begin
       CheckEquals('', LCoverageConfiguration.ApplicationParameters, 'Application Parameters set');
       CheckEquals('', LCoverageConfiguration.ExeFileName, 'Executable file name should not be set');
       CheckEquals('', LCoverageConfiguration.MapFileName, 'Map file name should not be set');
-      CheckEquals('', LCoverageConfiguration.OutputDir,   'Report output directory should not be set');
+      CheckEquals('.', LCoverageConfiguration.OutputDir,   'Report output directory should be equal to current directory, i.e. ''.''');
       CheckEquals('', LCoverageConfiguration.SourceDir,   'Source directory should not be set');
       CheckEquals('', LCoverageConfiguration.DebugLogFile, 'Debug logging file name should not be set');
       CheckEquals(0, LCoverageConfiguration.SourcePaths.Count, 0, 'Source paths should not have directories listed');
