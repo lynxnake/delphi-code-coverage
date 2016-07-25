@@ -23,6 +23,7 @@ uses
 type
   TCoverageConfigurationTest = class(TTestCase)
   private
+    function RandomAlphaString(ResultLength: integer): string;
     function RandomFileName : string;
   published
     procedure TestPreParsing;
@@ -78,6 +79,7 @@ type
     procedure TestExcludingFileExtension;
     procedure TestExcludingFileExtensionMultipleToggling;
     procedure TestExcludingFileExtensionFromUnitFile;
+    procedure TestExcludingFileExtensionWorksWithNamespacedUnits;
 
     procedure TestIncludingFileExtension;
     procedure TestIncludingFileExtensionMultipleToggling;
@@ -121,21 +123,25 @@ const
   cMAP_FILE_PARAMETER               : array [0 .. 0] of string = (I_CoverageConfiguration.cPARAMETER_MAP_FILE);
   cEXECUTABLE_PARAMETER             : array [0 .. 0] of string = (I_CoverageConfiguration.cPARAMETER_EXECUTABLE);
   cSOME_EXTENSION = '.someExt';
+  cSOME_THREE_LETTER_EXTENSION = '.sxt';
   cEXCLUDE_FILES_PREFIX = 'exclude';
 //==============================================================================
-function TCoverageConfigurationTest.RandomFileName: string;
+function TCoverageConfigurationTest.RandomAlphaString(ResultLength: integer): string;
 var
   lp : Integer;
 begin
+  Result := '';
   Randomize;
+  for lp := 1 to ResultLength do
+  begin
+    Result := Result + Chr(Ord('A') + Random(Ord('Z')-Ord('A')));
+  end;
+end;
+
+function TCoverageConfigurationTest.RandomFileName: string;
+begin
   repeat
-    Result := '';
-
-    for lp := 1 to 8 do
-    begin
-      Result := Result + Chr(Ord('A') + Random(26));
-    end;
-
+    Result := RandomAlphaString(8);
   until not FileExists(Result);
 end;
 
@@ -706,7 +712,7 @@ begin
       LFileNameList.Add(RandomFileName());
 
     for lp := 0 to Pred(LFileNameList.Count) do
-      LFileNameListWithExt.Add(IncludeTrailingPathDelimiter(GetCurrentDir) + LFileNameList.Strings[lp] + cSOME_EXTENSION);
+      LFileNameListWithExt.Add(IncludeTrailingPathDelimiter(GetCurrentDir) + LFileNameList.Strings[lp] + '.' + RandomAlphaString(ThreeLetterExtensionLength));
 
     repeat
       LFileListFileName := RandomFileName();
@@ -836,7 +842,7 @@ begin
       LCmdParams[Low(LCmdParams) + lp + 1] := LUnitFileNames.Strings[lp];
 
       if lp mod 3 = 0 then
-        LCmdParams[Low(LCmdParams) + lp + 1] := LCmdParams[Low(LCmdParams) + lp + 1] + cSOME_EXTENSION;
+        LCmdParams[Low(LCmdParams) + lp + 1] := LCmdParams[Low(LCmdParams) + lp + 1] + cSOME_THREE_LETTER_EXTENSION;
     end;
 
     LCoverageConfiguration := TCoverageConfiguration.Create(TMockCommandLineProvider.Create(LCmdParams));
@@ -845,7 +851,8 @@ begin
     CheckEquals(LUnitFileNames.Count, LCoverageConfiguration.Units.Count, 'Incorrect number of units listed');
 
     for lp := 0 to Pred(LUnitFileNames.Count) do
-      CheckNotEquals(-1, LCoverageConfiguration.Units.IndexOf(LUnitFileNames.Strings[lp]), 'Missing unit name');
+      if LCoverageConfiguration.Units.IndexOf(LUnitFileNames.Strings[lp]) = -1 then
+        Fail('Missing unit name');
 
     for lp := Pred(LUnitFileNames.Count) downto 0 do
     begin
@@ -1025,13 +1032,25 @@ begin
   SetLength(LCmdParams, 3);
   LCmdParams[Low(LCmdParams)]     := I_CoverageConfiguration.cPARAMETER_FILE_EXTENSION_EXCLUDE;
   LCmdParams[Low(LCmdParams) + 1] := I_CoverageConfiguration.cPARAMETER_UNIT;
-  LCmdParams[Low(LCmdParams) + 2] := LFileName + cSOME_EXTENSION;
+  LCmdParams[Low(LCmdParams) + 2] := LFileName + cSOME_THREE_LETTER_EXTENSION;
 
   LCoverageConfiguration := TCoverageConfiguration.Create(TMockCommandLineProvider.Create(LCmdParams));
   LCoverageConfiguration.ParseCommandLine;
 
   CheckEquals(1, LCoverageConfiguration.Units.Count, 'Incorrect number of units listed');
   CheckEquals(LFileName, LCoverageConfiguration.Units.Strings[0], 'Incorrect unit name listed');
+end;
+
+procedure TCoverageConfigurationTest.TestExcludingFileExtensionWorksWithNamespacedUnits;
+const
+  NamespacedUnitName = 'Vcl.ComCtrls';
+var
+  Testee: ICoverageConfiguration;
+begin
+  Testee := TCoverageConfiguration.Create(TMockCommandLineProvider.Create([I_CoverageConfiguration.cPARAMETER_FILE_EXTENSION_EXCLUDE,
+    I_CoverageConfiguration.cPARAMETER_UNIT, NamespacedUnitName]));
+  Testee.ParseCommandLine;
+  Check(Testee.Units.IndexOf(NamespacedUnitName) <> -1, 'Extension stripping should strip only three-letter extensions');
 end;
 
 //==============================================================================
@@ -1064,7 +1083,7 @@ begin
     begin
       if (lp mod 2 = 0) then
       begin
-        LExpectingFileList.Add(LFileNameList.Strings[lp] + cSOME_EXTENSION);
+        LExpectingFileList.Add(LFileNameList.Strings[lp] + cSOME_THREE_LETTER_EXTENSION);
         LCmdParams[Low(LCmdParams) + lp * 3] := I_CoverageConfiguration.cPARAMETER_FILE_EXTENSION_INCLUDE;
       end
       else
@@ -1074,7 +1093,7 @@ begin
       end;
 
       LCmdParams[Low(LCmdParams) + lp * 3 + 1] := I_CoverageConfiguration.cPARAMETER_UNIT;
-      LCmdParams[Low(LCmdParams) + lp * 3 + 2] := LFileNameList.Strings[lp] + cSOME_EXTENSION;
+      LCmdParams[Low(LCmdParams) + lp * 3 + 2] := LFileNameList.Strings[lp] + cSOME_THREE_LETTER_EXTENSION;
     end;
 
     LCoverageConfiguration := TCoverageConfiguration.Create(TMockCommandLineProvider.Create(LCmdParams));
@@ -1083,7 +1102,8 @@ begin
     CheckEquals(LExpectingFileList.Count, LCoverageConfiguration.Units.Count, 'Incorrect number of units listed');
 
     for lp := 0 to Pred(LExpectingFileList.Count) do
-      CheckNotEquals(-1, LCoverageConfiguration.Units.IndexOf(LExpectingFileList.Strings[lp]), 'Missing unit name');
+      if LCoverageConfiguration.Units.IndexOf(LExpectingFileList.Strings[lp]) = -1 then
+        Fail('Missing unit name');
 
     for lp := Pred(LExpectingFileList.Count) downto 0 do
     begin
@@ -1231,12 +1251,12 @@ begin
       end
       else
       begin
-        LExpectingFileList.Add(LFileNameList.Strings[lp] + cSOME_EXTENSION);
+        LExpectingFileList.Add(LFileNameList.Strings[lp] + cSOME_THREE_LETTER_EXTENSION);
         LCmdParams[Low(LCmdParams) + lp * 3] := I_CoverageConfiguration.cPARAMETER_FILE_EXTENSION_INCLUDE;
       end;
 
       LCmdParams[Low(LCmdParams) + lp * 3 + 1] := I_CoverageConfiguration.cPARAMETER_UNIT;
-      LCmdParams[Low(LCmdParams) + lp * 3 + 2] := LFileNameList.Strings[lp] + cSOME_EXTENSION;
+      LCmdParams[Low(LCmdParams) + lp * 3 + 2] := LFileNameList.Strings[lp] + cSOME_THREE_LETTER_EXTENSION;
     end;
 
     LCoverageConfiguration := TCoverageConfiguration.Create(TMockCommandLineProvider.Create(LCmdParams));
@@ -1245,7 +1265,8 @@ begin
     CheckEquals(LExpectingFileList.Count, LCoverageConfiguration.Units.Count, 'Incorrect number of units listed');
 
     for lp := 0 to Pred(LExpectingFileList.Count) do
-      CheckNotEquals(-1, LCoverageConfiguration.Units.IndexOf(LExpectingFileList.Strings[lp]), 'Missing unit name');
+      if LCoverageConfiguration.Units.IndexOf(LExpectingFileList.Strings[lp]) = -1 then
+        Fail('Missing unit name');
 
     for lp := Pred(LExpectingFileList.Count) downto 0 do
     begin
