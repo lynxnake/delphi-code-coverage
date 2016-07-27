@@ -60,6 +60,8 @@ begin
       WriteLn(E.ClassName, ': ', E.message);
   end;
 {$IFDEF DEBUG}
+  Writeln('Code Coverage finished.');
+  Write('Press Enter to close the console >');
   Readln;
 {$ENDIF}
 
