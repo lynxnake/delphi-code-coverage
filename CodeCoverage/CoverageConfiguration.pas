@@ -23,9 +23,6 @@ uses
   ModuleNameSpaceUnit,
   uConsoleOutput;
 
-const
-  ThreeLetterExtensionLength = 3;
-
 type
   TCoverageConfiguration = class(TInterfacedObject, ICoverageConfiguration)
   strict private
@@ -596,7 +593,6 @@ end;
 procedure TCoverageConfiguration.ParseUnitSwitch(var AParameter: Integer);
 var
   UnitString: string;
-  UnitExt: string;
 begin
   Inc(AParameter);
   try
@@ -604,11 +600,7 @@ begin
     while UnitString <> '' do
     begin
       if FStripFileExtension then
-      begin
-        UnitExt := ExtractFileExt(UnitString);
-        if Length(UnitExt) = ThreeLetterExtensionLength + 1 then
-          UnitString := ChangeFileExt(UnitString, ''); // Ensures that we strip out .pas if it was added for some reason
-      end;
+        UnitString := PathRemoveExtension(UnitString); // Ensures that we strip out .pas if it was added for some reason
       AddUnitString(UnitString);
 
       Inc(AParameter);
