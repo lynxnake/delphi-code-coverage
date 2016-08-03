@@ -51,6 +51,8 @@ type
 
     procedure AddCoverageElement(const RootElement: TJclSimpleXMLElem;
       const AType: string; const TotalCoveredCount, TotalCount: Integer);
+    procedure AddCoverageProperties(AProps: TJclSimpleXMLProps; ACovered, ATotal: integer);
+    function GetPercentage(ATotal, ACovered: Integer): Integer;
     function GetCoverageStringValue(const ACovered, ATotal: Integer): string;
   public
     constructor Create(const ACoverageConfiguration: ICoverageConfiguration);
@@ -283,25 +285,31 @@ var
 begin
   CoverageElement := RootElement.Items.Add('coverage');
   CoverageElement.Properties.Add('type', AType);
-  CoverageElement.Properties.Add(
-    'value',
-    GetCoverageStringValue(
-      TotalCoveredCount,
-      TotalCount
-    )
-  );
+  AddCoverageProperties(CoverageElement.Properties, TotalCoveredCount, TotalCount);
+end;
+
+procedure TXMLCoverageReport.AddCoverageProperties(AProps: TJclSimpleXMLProps; ACovered, ATotal: integer);
+begin
+  AProps.Add('value', GetCoverageStringValue(ACovered, ATotal));
+  AProps.Add('percentageValue', GetPercentage(ATotal, ACovered));
+  AProps.Add('coveredValue', ACovered);
+  AProps.Add('totalValue', ATotal);
 end;
 
 function TXMLCoverageReport.GetCoverageStringValue(const ACovered, ATotal: Integer): string;
 var
   Percent: Integer;
 begin
-  if ATotal = 0 then
-    Percent := 0
-  else
-    Percent := Round(ACovered * 100 / ATotal);
-
+  Percent := GetPercentage(ATotal, ACovered);
   Result := IntToStr(Percent) + '%   (' + IntToStr(ACovered) + '/' + IntToStr(ATotal) + ')';
+end;
+
+function TXMLCoverageReport.GetPercentage(ATotal, ACovered: Integer): Integer;
+begin
+  if ATotal = 0 then
+    Result := 0
+  else
+    Result := Round(ACovered * 100 / ATotal);
 end;
 
 end.
